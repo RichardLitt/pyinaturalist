@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 import urllib3.util.retry
-from requests import Request
+from requests import Request, Session
 from requests_ratelimiter import Limiter, RequestRate
 from urllib3.exceptions import MaxRetryError
 
@@ -77,7 +77,7 @@ def test_request_headers(mock_send, mock_format):
 )
 @patch('pyinaturalist.session.format_response')
 @patch('pyinaturalist.session.getenv')
-@patch.object(ClientSession, 'send')
+@patch.object(Session, 'send')
 def test_request_dry_run(
     mock_send,
     mock_getenv,
