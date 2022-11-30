@@ -5,18 +5,19 @@ from unittest.mock import patch
 import pytest
 import urllib3.util.retry
 from requests import Request, Session
+from requests_cache import CachedSession
 from requests_ratelimiter import Limiter, RequestRate
 from urllib3.exceptions import MaxRetryError
 
 from pyinaturalist.constants import CACHE_EXPIRATION
 from pyinaturalist.session import (
     CACHE_FILE,
-    MOCK_RESPONSE,
     ClientSession,
     clear_cache,
     delete,
     get,
     get_local_session,
+    get_mock_response,
     get_refresh_params,
     post,
     put,
@@ -103,14 +104,14 @@ def test_request_dry_run(
         assert mock_send.call_count == 1
         assert response == mock_send()
     else:
-        assert response == MOCK_RESPONSE
+        assert response.reason == 'DRY_RUN'
         assert mock_send.call_count == 0
 
 
-@patch('pyinaturalist.session.Session.send')
+@patch.object(Session, 'send')
 def test_request_dry_run_kwarg(mock_request):
     response = ClientSession().request('GET', 'http://url', dry_run=True)
-    assert response == MOCK_RESPONSE
+    assert response.reason == 'DRY_RUN'
     assert mock_request.call_count == 0
 
 
@@ -202,11 +203,14 @@ def test_session__send(mock_limiter, mock_requests_send):
 
 
 @pytest.mark.enable_client_session  # For all other tests, caching is disabled. Re-enable that here.
-@patch('requests_cache.session.CacheMixin.send')
+@patch.object(Session, 'send')
+@patch.object(CachedSession, 'send')
 @patch('pyinaturalist.session.ClientSession._validate_json')
-def test_session__send__cache_settings(mock_validate_json, mock_cache_send):
+def test_session__send__cache_settings(mock_validate_json, mock_cache_send, mock_send):
     session = ClientSession()
     request = Request(method='GET', url='http://test.com').prepare()
+    # mock_cache_send.return_value = get_mock_response(request)
+    mock_send.return_value = get_mock_response(request)
 
     session.send(request)
     mock_cache_send.assert_called_with(request, expire_after=None, refresh=False, timeout=(5, 10))

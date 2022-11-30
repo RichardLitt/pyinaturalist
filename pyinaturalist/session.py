@@ -1,5 +1,6 @@
 """Session class and related functions for preparing and sending API requests"""
 import threading
+from io import BytesIO
 from json import JSONDecodeError
 from logging import getLogger
 from os import getenv
@@ -18,6 +19,7 @@ from requests_ratelimiter import (
     RequestRate,
     SQLiteBucket,
 )
+from urllib3 import HTTPResponse
 from urllib3.util import Retry
 
 import pyinaturalist
@@ -47,10 +49,6 @@ from pyinaturalist.request_params import (
     preprocess_request_body,
     preprocess_request_params,
 )
-
-# Mock response content to return in dry-run mode
-MOCK_RESPONSE = Mock(spec=Response)
-MOCK_RESPONSE.json.return_value = {'results': [], 'total_results': 0, 'access_token': ''}
 
 # Rate limiter specific to forced refresh request
 REFRESH_LIMITER = Limiter(
@@ -296,7 +294,7 @@ class ClientSession(CacheMixin, LimiterMixin, Session):
 
         # Make a mock request, if specified
         if dry_run or is_dry_run_enabled(request.method):
-            return MOCK_RESPONSE
+            return get_mock_response(request)
 
         # Otherwise, send the request
         read_timeout = timeout or self.timeout
@@ -428,6 +426,22 @@ def get_refresh_params(endpoint) -> Dict:
             v += 1
 
     return {'refresh': True, 'v': v} if v > 0 else {'refresh': True}
+
+
+def get_mock_response(request: PreparedRequest):
+    """Get mock response content to return in dry-run mode"""
+    mock_response = Mock(
+        spec=Response,
+        headers={'Cache-Control': 'no-store'},
+        request=request,
+        status_code=200,
+        reason='DRY_RUN',
+        raw=HTTPResponse(body=BytesIO(b'')),
+        expires=None,
+        expires_delta=None,
+    )
+    mock_response.json.return_value = {'results': [], 'total_results': 0, 'access_token': ''}
+    return mock_response
 
 
 def is_dry_run_enabled(method: str) -> bool:
