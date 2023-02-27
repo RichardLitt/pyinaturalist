@@ -1,16 +1,21 @@
 """Session class and related functions for preparing and sending API requests"""
+import json
 import threading
-from io import BytesIO
 from json import JSONDecodeError
 from logging import getLogger
 from os import getenv
 from typing import Dict, Optional, Type
-from unittest.mock import Mock
 
 from requests import PreparedRequest, Request, Response, Session
 from requests.adapters import HTTPAdapter
 from requests.utils import default_user_agent
-from requests_cache import AnyRequest, CacheMixin, ExpirationPatterns, ExpirationTime
+from requests_cache import (
+    AnyRequest,
+    CachedResponse,
+    CacheMixin,
+    ExpirationPatterns,
+    ExpirationTime,
+)
 from requests_ratelimiter import (
     AbstractBucket,
     BucketFullException,
@@ -19,7 +24,6 @@ from requests_ratelimiter import (
     RequestRate,
     SQLiteBucket,
 )
-from urllib3 import HTTPResponse
 from urllib3.util import Retry
 
 import pyinaturalist
@@ -428,19 +432,16 @@ def get_refresh_params(endpoint) -> Dict:
     return {'refresh': True, 'v': v} if v > 0 else {'refresh': True}
 
 
-def get_mock_response(request: PreparedRequest):
+def get_mock_response(request: PreparedRequest) -> CachedResponse:
     """Get mock response content to return in dry-run mode"""
-    mock_response = Mock(
-        spec=Response,
+    json_content = {'results': [], 'total_results': 0, 'access_token': ''}
+    mock_response = CachedResponse(
         headers={'Cache-Control': 'no-store'},
         request=request,
         status_code=200,
         reason='DRY_RUN',
-        raw=HTTPResponse(body=BytesIO(b'')),
-        expires=None,
-        expires_delta=None,
+        content=json.dumps(json_content).encode(),
     )
-    mock_response.json.return_value = {'results': [], 'total_results': 0, 'access_token': ''}
     return mock_response
 
 
